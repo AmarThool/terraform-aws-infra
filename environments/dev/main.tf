@@ -188,5 +188,46 @@ resource "aws_lb_target_group_attachment" "web" {
 }*/
 
 resource "aws_launch_template" "web" {
+    name_prefix = "myapp-web-lt-"
+    image_id = data.aws_ami.amazon_linux.id
+    instance_type = "t2.micro"
+    key_name = "myapp-key"
+    vpc_security_group_ids = [aws_security_group.web.id]
     
+    user_data = base64encode(<<-EOF
+              #!/bin/bash
+              dnf install -y httpd
+              systemctl start httpd
+              systemctl enable httpd
+              echo "<h1>Hello from $(hostname -f)</h1>" > /var/www/html/index.html
+              EOF
+    )
+    tag_specifications {
+        resource_type = "instance"
+        tags = {
+            Name = "myapp-web-asg"
+            Environment = "dev"
+        }
+    }
+    
+}
+resource "aws_autoscaling_group" "web" {
+    name = "myapp-web-asg"
+    min_size = 2
+    max_size = 4
+    desired_capacity = 2
+    vpc_zone_identifier = [aws_subnet.this["public_1a"].id, aws_subnet.this["public_1b"].id]
+    target_group_arns = [aws_lb_target_group.web.arn]
+    health_check_type = "ELB"
+    health_check_grace_period = 60
+
+    launch_template {
+        id = aws_launch_template.web.id
+        version = "$Latest"
+    }
+    tag {
+        key = "Environment"
+        value = "dev"
+        propagate_at_launch = true
+    }
 }
