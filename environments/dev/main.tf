@@ -231,3 +231,54 @@ resource "aws_autoscaling_group" "web" {
         propagate_at_launch = true
     }
 }
+resource "random_password" "db" {
+    length = 16
+    special = false
+}
+resource "aws_secretsmanager_secret" "db_password" {
+    name = "myapp/dbpassword"
+}
+resource "aws_secretsmanager_secret_version" "db_password" {
+    secret_id = aws_secretsmanager_secret.db_password.id
+    secret_string = random_password.db.result
+}
+resource "aws_db_subnet_group" "main" {
+  name       = "myapp-db-subnet-group"
+  subnet_ids = [aws_subnet.this["private_1a"].id, aws_subnet.this["private_1b"].id]
+}
+
+resource "aws_security_group" "rds" {
+  name   = "myapp-rds-sg"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.web.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+resource "aws_db_instance" "main" {
+  identifier             = "myapp-db"
+  engine                 = "mysql"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
+  db_name                = "myappdb"
+  username               = "admin"
+  password               = random_password.db.result
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+  publicly_accessible    = false
+  skip_final_snapshot    = true
+
+  tags = {
+    Environment = "dev"
+  }
+}
