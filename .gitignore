@@ -1,0 +1,4 @@
+environments/dev/.terraform/
+environments/prod/.terraform/
+bootstap/.terraform/
+.DS_Store
